@@ -1,0 +1,227 @@
+---
+title: "Property Tax Rate Analysis"
+format: html
+editor: visual
+---
+
+```{r}
+
+# set default CRAN mirror
+options(repos = "https://cran.rstudio.com/")
+
+```
+
+```{r}
+# install packages
+install.packages("readxl")
+library(readxl)
+
+install.packages("dplyr")
+library(dplyr)
+library(tidyr)
+library(stringr)
+
+install.packages("writexl")
+library(writexl)
+
+#other packages
+library(here)
+library(tidyverse) #has all the tidyverse stuff
+```
+
+```{r}
+# read property tax data into R
+rates_2021 <- read_excel(here("20202021_Property_Tax_Rates.xlsx"))
+rates_2022 <- read_excel(here("20212022_Property_Tax_Rates.xlsx"))
+rates_2023 <- read_excel(here("20222023_Property_Tax_Rates.xlsx"))
+rates_2024 <- read_excel(here("20232024_Property_Tax_Rates.xlsx"))
+```
+
+```{r}
+# populate correct sales assessment ratio for 2024
+rates_2024 <- rates_2024 %>%
+  left_join(
+    rates_2024 %>%
+      filter(County == Municipality) %>%
+      select(County, correct_sales_ratio = `2023 Sales Assessment Ratio`),
+    by = "County"
+  ) %>%
+  mutate(
+    `2023 Sales Assessment Ratio` = if_else(
+      County != Municipality,
+      correct_sales_ratio,
+      `2023 Sales Assessment Ratio`
+    )
+  ) %>%
+  select(-correct_sales_ratio)
+
+```
+
+```{r}
+# populate correct effective county rates for 2024
+rates_2024 <- rates_2024 %>%
+  left_join(
+    rates_2024 %>%
+      filter(County == Municipality) %>%
+      select(County, correct_eff_rate = `Effective County Rate`),
+    by = "County"
+  ) %>%
+  mutate(
+    `Effective County Rate` = if_else(
+      County != Municipality,
+      correct_eff_rate,
+      `Effective County Rate`
+    )
+  ) %>%
+  select(-correct_eff_rate)
+
+```
+
+```{r}
+# populate correct effective combined county rates for 2024
+
+rates_2024 <- rates_2024 %>%
+  mutate(correct_eff_combined = round(`2023 Sales Assessment Ratio` * `Combined Rate`, 4)) %>%
+  select(-`Effective Combined Rate`)  %>% 
+  rename(
+    `Effective Combined Rate` = "correct_eff_combined"
+  )
+```
+
+```{r}
+# add year identifier
+rates_2021 <- rates_2021 %>%
+  mutate(fy = "2021")
+
+rates_2022 <- rates_2022 %>%
+  mutate(fy = "2022")
+
+rates_2023 <- rates_2023 %>%
+  mutate(fy = "2023")
+
+rates_2024 <- rates_2024 %>%
+  mutate(fy = "2024")
+```
+
+```{r}
+# rename sales assessment ratio for all four dfs
+rates_2021 <- rates_2021 %>%
+  rename(
+    sales_assess_ratio = "2020 Sales Assessment Ratio"
+  )
+
+rates_2022 <- rates_2022 %>%
+  rename(
+    sales_assess_ratio = "2021 Sales Assessment Ratio"
+  )
+
+rates_2023 <- rates_2023 %>%
+  rename(
+    sales_assess_ratio = "2022 Sales Assessment Ratio"
+  )
+
+rates_2024 <- rates_2024 %>%
+  rename(
+    sales_assess_ratio = "2023 Sales Assessment Ratio"
+  )
+
+```
+
+```{r}
+# combine dataframes
+all_rates <- bind_rows(
+  rates_2021,
+  rates_2022,
+  rates_2023,
+  rates_2024
+)
+
+```
+
+```{r}
+# rename columns
+all_rates <- all_rates %>%
+  rename(
+  reappraisal_yr = "Year of Latest Reappraisal",
+  county = "County",
+  municipality = "Municipality",
+  county_rate = "County Rate",
+  municipal_rate = "Municipal Rate",
+  combined_rate = "Combined Rate",
+  effect_municipal_rate = "Effective Municipal Rate",
+  effect_combined_rate = "Effective Combined Rate",
+  effect_county_rate = "Effective County",
+  )
+```
+
+```{r}
+# filter county data for fy
+county_rates_21_24 <- all_rates %>% 
+  filter(fy %in% c("2021", "2024")
+         )
+```
+
+```{r}
+# pivot for 2021 and 2024 county rates
+
+county_rates_21_24 <- county_rates_21_24 %>%
+  select(county, fy, county_rate) %>%
+  distinct() %>%
+  pivot_wider(names_from = fy, values_from = county_rate) %>%
+  rename(
+    rate_2021 = "2021", 
+    rate_2024 = "2024")
+```
+
+```{r}
+# calculate county rate difference 
+county_rates_21_24 <- county_rates_21_24 %>%
+  mutate(rate_difference = rate_2024 - rate_2021)
+
+  print(county_rates_21_24)
+
+```
+
+```{r}
+# filter counties with increased county rates
+increase_county_rate_21_24 <- county_rates_21_24 %>%
+  filter(rate_difference > 0)
+
+  print(increase_county_rate_21_24)
+```
+
+```{r}
+# filter municipal data for year_range
+municipal_rates_21_24 <- all_rates %>% 
+  filter(fy %in% c("2021", "2024")
+         )
+```
+
+```{r}
+# pivot for 2020-2021 and 2023-2024 county rates
+
+municipal_rates_21_24 <- municipal_rates_21_24 %>%
+  select(municipality, fy, municipal_rate) %>%
+  distinct() %>%
+  pivot_wider(names_from = fy, values_from = municipal_rate) %>%
+  rename(
+    rate_2021 = "2021", 
+    rate_2024 = "2024") %>%
+  drop_na(rate_2021, rate_2024)
+```
+
+```{r}
+# calculate municipal rate difference 
+municipal_rates_21_24 <- municipal_rates_21_24 %>%
+  mutate(rate_difference = rate_2024 - rate_2021)
+
+  print(municipal_rates_21_24)
+```
+
+```{r}
+# filter municipalities with increased municipal rates
+increase_municipal_rate_21_24 <- municipal_rates_21_24 %>%
+  filter(rate_difference > 0)
+
+  print(increase_municipal_rate_21_24)
+```
