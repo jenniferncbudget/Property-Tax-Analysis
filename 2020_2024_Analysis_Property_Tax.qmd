@@ -1,14 +1,12 @@
 ---
-title: "Property Tax Rate Analysis"
+title: "Property Tax Analysis"
 format: html
 editor: visual
 ---
 
 ```{r}
-
 # set default CRAN mirror
 options(repos = "https://cran.rstudio.com/")
-
 ```
 
 ```{r}
